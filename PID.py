@@ -14,14 +14,14 @@ class PID:
         # Desired setpoint in pixels
         self.setpoint = setpoint
 
-        # Conversion factor 
+        # Conversion factor (degrees per pixel)
         self.deg_per_px = deg_per_px
 
         # Derivative smoothing and dt cap
         self.tau = tau
         self.max_dt = max_dt
 
-        # Anti-windup limit for integral 
+        # Anti-windup limit for integral (in pixel-seconds)
         self.integral_limit = integral_limit
 
         # Internal state
@@ -36,7 +36,7 @@ class PID:
         now = time.monotonic()
         dt = max(1e-6, min(now - self.prev_time, self.max_dt))
 
-        # Compute error 
+        # Compute error in pixels
         error = self.setpoint - measurement
 
         # Integrate with clamping
@@ -67,10 +67,11 @@ class PID:
         self.last_error = error
         self.last_dt = dt
 
-        # Output in degrees
+        # Convert pixel-output to degrees
         return -output_px * self.deg_per_px
 
     def reset(self):
+        # Clear integral and derivative history
         self.integral = 0.0
         self.deriv = 0.0
         self.prev_error = None
@@ -82,7 +83,10 @@ class PID:
 def clamp(value, vmin, vmax):
     return max(vmin, min(vmax, value))
 
-
+# Placeholder for detection logic
+def get_measurement_from_camera(frame):
+    # Replace with your actual detection returning y-coordinate or None
+    return None
 
 if __name__ == '__main__':
     # Initialize camera
@@ -95,13 +99,13 @@ if __name__ == '__main__':
 
     # Frame dimensions and timing
     FRAME_HEIGHT = frame.shape[0]
-    FRAME_RATE = 120.0                     # Camera runs at ~120 FPS
-    LOOP_DT_TARGET = 1.0 / FRAME_RATE      # Loop interval tied to frame rate
+    FRAME_RATE = 120.0
+    LOOP_DT_TARGET = 1.0 / FRAME_RATE
 
     # Compute vertical FoV
-    PIXEL_SIZE_M = 1.55e-6                 # meters per pixel
+    PIXEL_SIZE_M = 1.55e-6
     SENSOR_HEIGHT_M = FRAME_HEIGHT * PIXEL_SIZE_M
-    FOCAL_LENGTH_M = 35e-3                 # 35 mm lens in meters
+    FOCAL_LENGTH_M = 35e-3
     vfov_rad = 2 * math.atan(SENSOR_HEIGHT_M / (2 * FOCAL_LENGTH_M))
     vfov_deg = math.degrees(vfov_rad)
     deg_per_px = vfov_deg / FRAME_HEIGHT
@@ -109,7 +113,7 @@ if __name__ == '__main__':
     # PID and servo settings
     pid_setpoint = FRAME_HEIGHT / 2
     SERVO_MIN, SERVO_MAX = -90, 90
-    I_LIMIT = SERVO_MAX / 0.10             # based on ki
+    I_LIMIT = SERVO_MAX / 0.10
 
     pid = PID(
         kp=0.11,
@@ -122,7 +126,7 @@ if __name__ == '__main__':
         integral_limit=I_LIMIT
     )
 
-    # Initialize PIM183
+    # Initialize PanTilt HAT
     try:
         pth.servo_enable(2, True)
         current_tilt = 0.0
@@ -133,7 +137,10 @@ if __name__ == '__main__':
         cap.release()
         exit()
 
-    PIXEL_DEADBAND = 10    # pixels
+    # Tracking control variables
+    PIXEL_DEADBAND = 10    # px
+    MISS_LIMIT = 10        # frames of missed detection before deactivating
+    miss_count = 0
     pid_active = False
 
     print("[INFO] Starting tracking loop. Press Ctrl+C to exit.")
@@ -141,34 +148,39 @@ if __name__ == '__main__':
         while True:
             loop_start = time.monotonic()
 
-            # Read frame; skip if the camera failed
+            # 1) Read frame
             ret, frame = cap.read()
             if not ret:
                 continue
 
-            # Get object measurement once per frame
+            # 2) Detect object
             measurement_y = get_measurement_from_camera(frame)
 
-            # PID activation state machine
-            if measurement_y is not None and not pid_active:
+            # 3) Miss-count logic instead of immediate reset on single-frame dropout
+            if measurement_y is None:
+                miss_count += 1
+            else:
+                miss_count = 0
+
+            # 4) State-machine with MISS_LIMIT
+            if miss_count >= MISS_LIMIT and pid_active:
+                pid_active = False
+            elif miss_count == 0 and not pid_active and measurement_y is not None:
                 pid.reset()
                 pid_active = True
-            elif measurement_y is None and pid_active:
-                pid_active = False
 
-            # Only update and write to servo when active
-            if pid_active:
+            # 5) PID update and servo write when active
+            if pid_active and measurement_y is not None:
                 if abs(pid.last_error) > PIXEL_DEADBAND:
                     delta_deg = pid.update(measurement_y)
                 else:
                     delta_deg = 0.0
 
-                # Compute and clamp new tilt angle
                 desired = current_tilt + delta_deg
                 current_tilt = clamp(desired, SERVO_MIN, SERVO_MAX)
                 pth.tilt(int(round(current_tilt)))
 
-            # Sleep to maintain camera-driven loop rate
+            # 6) Maintain loop timing
             elapsed = time.monotonic() - loop_start
             sleep_time = LOOP_DT_TARGET - elapsed
             if sleep_time > 0:
