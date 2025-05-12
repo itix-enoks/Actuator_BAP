@@ -70,10 +70,14 @@ pid = PID(
     max_dt=0.1,
     integral_limit=(90 / 0.10)
 )
+pth.tilt(0)
 
 # Simulate measurements from 0 to 500 px in ~30 px steps
 for measurement in range(0, 501, 20):
     output_deg = pid.update(measurement)
+    desired = current_tilt + output_deg
+    current_tilt = clamp(desired, SERVO_MIN, SERVO_MAX)
+    pth.tilt(int(round(current_tilt)))
     print(f"Measurement: {measurement:>3} Error: {250 - measurement} px → Output: {output_deg:>7.4f}°")
     # Optional: mimic a fixed loop time
     time.sleep(1/120.0)
