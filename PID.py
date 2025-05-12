@@ -137,8 +137,8 @@ if __name__ == '__main__':
         exit()
 
     # Tracking control variables
-    PIXEL_DEADBAND = 10    # px
-    MISS_LIMIT = 10        # frames of missed detection before deactivating
+    PIXEL_DEADBAND = 31    # px
+    MISS_LIMIT = 120        # frames of missed detection before deactivating
     miss_count = 0
     pid_active = False
 
