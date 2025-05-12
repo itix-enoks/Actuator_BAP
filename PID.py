@@ -103,9 +103,8 @@ if __name__ == '__main__':
     LOOP_DT_TARGET = 1.0 / FRAME_RATE
 
     # Compute vertical FoV
-    PIXEL_SIZE_M = 1.55e-6
-    SENSOR_HEIGHT_M = FRAME_HEIGHT * PIXEL_SIZE_M
-    FOCAL_LENGTH_M = 35e-3
+    SENSOR_HEIGHT_MM = 4.712
+    FOCAL_LENGTH_MM = 35
     vfov_rad = 2 * math.atan(SENSOR_HEIGHT_M / (2 * FOCAL_LENGTH_M))
     vfov_deg = math.degrees(vfov_rad)
     deg_per_px = vfov_deg / FRAME_HEIGHT
