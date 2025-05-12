@@ -170,7 +170,7 @@ if __name__ == '__main__':
 
             # 5) PID update and servo write when active
             if pid_active and measurement_y is not None:
-                if abs(pid.last_error) > PIXEL_DEADBAND:
+                if abs(pid.setpoint - measurement_y) > PIXEL_DEADBAND:
                     delta_deg = pid.update(measurement_y)
                 else:
                     delta_deg = 0.0
