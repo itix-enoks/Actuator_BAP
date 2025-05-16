@@ -11,10 +11,10 @@ class PID:
         self.ki = ki
         self.kd = kd
 
-        # Desired setpoint in pixels
+        # Desired setpoint in pixels (center of image height in camera frame)
         self.setpoint = setpoint
 
-        # Conversion factor (degrees per pixel)
+        # Conversion factor (amount of degrees a pixel represents)
         self.deg_per_px = deg_per_px
 
         # Derivative smoothing and dt cap
