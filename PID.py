@@ -101,7 +101,7 @@ def run_tasks_in_parallel(tasks):
 
 
 if __name__ == '__main__':
-    # TODO: storing frames
+    # TODO: parallelize tilt-mechanism
 
     # Create shared-memory for capturing, processing and tilting
     shared_obj = SharedObject()
@@ -206,8 +206,9 @@ if __name__ == '__main__':
             camera_prev_time = camera_curr_time
 
             # 2.2) Preview frame
+            recording_id = time.strftime('%y%m%d%H%M%S', time.gmtime())
             if camera_preview_output is not None:
-                cv.imshow(f'[{RECORDING_ID}] [Live] Processed Frame', camera_preview_output)
+                cv.imshow(f'[{recording_id}] [Live] Processed Frame', camera_preview_output)
 
             # 3) Miss-count logic instead of immediate reset on single-frame dropout
             if measurement_y is None:
@@ -242,7 +243,13 @@ if __name__ == '__main__':
             # 7) Exit & Store frames
             if cv.waitKey(1) & 0xFF == ord('q'):
                 shared_obj.is_exit = True
-                # TODO: store frames
+
+                output_dir = os.path.join("output_frames", recording_id)
+                os.makedirs(output_dir, exist_ok=True)
+
+                for i, frame in enumerate(shared_obj.frame_buffer):
+                    filename = os.path.join(output_dir, f"frame_{i:06d}.png")
+                    cv.imwrite(filename, frame)
 
 
     except KeyboardInterrupt:
