@@ -101,7 +101,7 @@ def run_tasks_in_parallel(tasks):
 
 
 if __name__ == '__main__':
-    # TODO: FPS overlay, storing frames
+    # TODO: storing frames
 
     # Create shared-memory for capturing, processing and tilting
     shared_obj = SharedObject()
@@ -187,7 +187,25 @@ if __name__ == '__main__':
 
             camera_prev_gray = current_gray_frame
 
-            # 2.1) Preview frame
+            # 2.1) FPS overlay
+            camera_frame_cnt_in_sec += 1
+            camera_curr_time = time.time_ns()
+            camera_diff_time += (camera_curr_time - camera_prev_time) / 1e6
+
+            if int(camera_diff_time) >= 1000:
+                camera_frame_per_sec = camera_frame_cnt_in_sec
+                camera_frame_cnt_in_sec = 0
+                camera_diff_time = 0
+                camera_is_one_sec_passed = True
+
+            if camera_is_one_sec_passed:
+                cv.putText(camera_preview_output, f"FPS: {camera_frame_per_sec}", (10, 25), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            else:
+                cv.putText(camera_preview_output, f"FPS: (WAITING...)", (10, 25), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+            camera_prev_time = camera_curr_time
+
+            # 2.2) Preview frame
             if camera_preview_output is not None:
                 cv.imshow(f'[{RECORDING_ID}] [Live] Processed Frame', camera_preview_output)
 
