@@ -101,18 +101,17 @@ def run_tasks_in_parallel(tasks):
 
 
 if __name__ == '__main__':
-    # TODO: impreview, FPS overlay, storing frames
+    # TODO: FPS overlay, storing frames
 
-    # TODO: Initialize camera
-    cap = cv2.VideoCapture(0)
-    ret, frame = cap.read()
-    if not ret:
-        print("[ERROR] Camera capture failed.")
-        cap.release()
-        exit()
+    # Create shared-memory for capturing, processing and tilting
+    shared_obj = SharedObject()
+
+    # Initialize camera
+    camera = CameraStream(shared_obj)
+    camera.start()
 
     # Frame dimensions and timing
-    FRAME_HEIGHT = frame.shape[0]
+    FRAME_HEIGHT = 1332
     FRAME_RATE = 120.0
     LOOP_DT_TARGET = 1.0 / FRAME_RATE
 
@@ -147,7 +146,7 @@ if __name__ == '__main__':
         print("[INFO] Tilt servo initialized.")
     except Exception as e:
         print(f"[ERROR] Could not initialize PanTilt HAT: {e}")
-        cap.release()
+        camera.stop()
         exit()
 
     # Tracking control variables
@@ -156,18 +155,41 @@ if __name__ == '__main__':
     miss_count = 0
     pid_active = False
 
+    # Camera variables
+    # Measurement
+    camera_preview_output = None
+    camera_prev_gray = None
+
+    # FPS Overlay
+    camera_prev_time = time.time_ns()
+    camera_diff_time = 0
+    camera_frame_per_sec = 0
+    camera_frame_cnt_in_sec = 0
+    camera_is_one_sec_passed = False
+
+    # Storing frames
+    camera_frame_buffer = []
+
     print("[INFO] Starting tracking loop. Press Ctrl+C to exit.")
     try:
         while True:
             loop_start = time.monotonic()
 
-            # 1) TODO: Read frame
-            ret, frame = cap.read()
-            if not ret:
-                continue
+            # 1) Read frame
+            current_frame = shared_obj.frame
+            current_gray_frame = cv.cvtColor(current_frame, cv.COLOR_RGB2GRAY) if current_frame is not None else None
 
-            # 2) TODO: Detect object
-            measurement_y = get_measurement_from_camera(frame)
+            # 2) Detect object
+            if current_frame is None or camera_prev_gray is None:
+                camera_preview_output, measurement_y = None, None
+            else:
+                camera_preview_output, measurement_y = process_frames(camera_prev_gray, current_gray_frame, current_frame)
+
+            camera_prev_gray = current_gray_frame
+
+            # 2.1) Preview frame
+            if camera_preview_output is not None:
+                cv.imshow(f'[{RECORDING_ID}] [Live] Processed Frame', camera_preview_output)
 
             # 3) Miss-count logic instead of immediate reset on single-frame dropout
             if measurement_y is None:
@@ -199,9 +221,15 @@ if __name__ == '__main__':
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
+            # 7) Exit & Store frames
+            if cv.waitKey(1) & 0xFF == ord('q'):
+                shared_obj.is_exit = True
+                # TODO: store frames
+
+
     except KeyboardInterrupt:
         print("\n[INFO] Exiting, disabling tilt servo.")
     finally:
         pth.servo_enable(2, False)
-        cap.release()
+        camera.stop()
         cv2.destroyAllWindows()
