@@ -1,7 +1,13 @@
 import time
 import math
 import cv2
+
 import pantilthat as pth
+
+from threading import Thread
+from processor.camera import CameraStream, SharedObject
+from processor.algorithms.frame_difference import process_frames
+
 
 class PID:
     def __init__(self, kp, ki, kd, setpoint, deg_per_px,
@@ -83,22 +89,35 @@ class PID:
 def clamp(value, vmin, vmax):
     return max(vmin, min(vmax, value))
 
+
 # Placeholder for detection logic
 def get_measurement_from_camera(frame):
     # Replace with your actual detection returning y-coordinate or None
     return None
 
+
+def tilt(shared_obj):
+    while True:
+        if shared_obj.is_exit:
+            sys.exit(0)
+        pth.pan(0)
+        pth.tilt(shared_obj.current_tilt)
+
+
 if __name__ == '__main__':
+    # Create shared-memory for capturing, processing and tilting
+    shared_obj = SharedObject()
+
     # Initialize camera
-    cap = cv2.VideoCapture(0)
-    ret, frame = cap.read()
-    if not ret:
-        print("[ERROR] Camera capture failed.")
-        cap.release()
-        exit()
+    camera = CameraStream(shared_obj)
+    camera.start()
+
+    # Initialize and start thread for tilting
+    tilt_thread = Thread(target=tilt, args=(shared_obj,), daemon=True)
+    tilt_thread.start()
 
     # Frame dimensions and timing
-    FRAME_HEIGHT = frame.shape[0]
+    FRAME_HEIGHT = 1332
     FRAME_RATE = 120.0
     LOOP_DT_TARGET = 1.0 / FRAME_RATE
 
@@ -129,11 +148,12 @@ if __name__ == '__main__':
     try:
         pth.servo_enable(2, True)
         current_tilt = 0.0
-        pth.tilt(int(current_tilt))
+        # pth.tilt(int(current_tilt))
         print("[INFO] Tilt servo initialized.")
+
     except Exception as e:
         print(f"[ERROR] Could not initialize PanTilt HAT: {e}")
-        cap.release()
+        camera.stop()
         exit()
 
     # Tracking control variables
@@ -142,18 +162,60 @@ if __name__ == '__main__':
     miss_count = 0
     pid_active = False
 
+    # Camera variables
+    # Measurement
+    camera_preview_output = None
+    camera_prev_gray = None
+
+    # FPS Overlay
+    camera_prev_time = time.time_ns()
+    camera_diff_time = 0
+    camera_frame_per_sec = 0
+    camera_frame_cnt_in_sec = 0
+    camera_is_one_sec_passed = False
+
+    # Storing frames
+    camera_frame_buffer = []
+
     print("[INFO] Starting tracking loop. Press Ctrl+C to exit.")
     try:
         while True:
             loop_start = time.monotonic()
 
             # 1) Read frame
-            ret, frame = cap.read()
-            if not ret:
-                continue
+            current_frame = shared_obj.frame
+            current_gray_frame = cv.cvtColor(current_frame, cv.COLOR_RGB2GRAY) if current_frame is not None else None
 
             # 2) Detect object
-            measurement_y = get_measurement_from_camera(frame)
+            if current_frame is None or camera_prev_gray is None:
+                camera_preview_output, measurement_y = None, None
+            else:
+                camera_preview_output, measurement_y = process_frames(camera_prev_gray, current_gray_frame, current_frame)
+
+            camera_prev_gray = current_gray_frame
+
+            # 2.1) FPS overlay
+            camera_frame_cnt_in_sec += 1
+            camera_curr_time = time.time_ns()
+            camera_diff_time += (camera_curr_time - camera_prev_time) / 1e6
+
+            if int(camera_diff_time) >= 1000:
+                camera_frame_per_sec = camera_frame_cnt_in_sec
+                camera_frame_cnt_in_sec = 0
+                camera_diff_time = 0
+                camera_is_one_sec_passed = True
+
+            if camera_is_one_sec_passed:
+                cv.putText(camera_preview_output, f"FPS: {camera_frame_per_sec}", (10, 25), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            else:
+                cv.putText(camera_preview_output, f"FPS: (WAITING...)", (10, 25), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+            camera_prev_time = camera_curr_time
+
+            # 2.2) Preview frame
+            recording_id = time.strftime('%y%m%d%H%M%S', time.gmtime())
+            if camera_preview_output is not None:
+                cv.imshow(f'[{recording_id}] [Live] Processed Frame', camera_preview_output)
 
             # 3) Miss-count logic instead of immediate reset on single-frame dropout
             if measurement_y is None:
@@ -177,7 +239,8 @@ if __name__ == '__main__':
 
                 desired = current_tilt + delta_deg
                 current_tilt = clamp(desired, SERVO_MIN, SERVO_MAX)
-                pth.tilt(int(round(current_tilt)))
+                # pth.tilt(int(round(current_tilt)))
+                shared_obj.current_tilt = int(round(current_tilt))
 
             # 6) Maintain loop timing
             elapsed = time.monotonic() - loop_start
@@ -185,9 +248,21 @@ if __name__ == '__main__':
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
+            # 7) Exit & Store frames
+            if cv.waitKey(1) & 0xFF == ord('q'):
+                shared_obj.is_exit = True
+
+                output_dir = os.path.join("output_frames", recording_id)
+                os.makedirs(output_dir, exist_ok=True)
+
+                for i, frame in enumerate(shared_obj.frame_buffer):
+                    filename = os.path.join(output_dir, f"frame_{i:06d}.png")
+                    cv.imwrite(filename, frame)
+
     except KeyboardInterrupt:
         print("\n[INFO] Exiting, disabling tilt servo.")
+
     finally:
         pth.servo_enable(2, False)
-        cap.release()
+        camera.stop()
         cv2.destroyAllWindows()
