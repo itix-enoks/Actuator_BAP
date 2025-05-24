@@ -3,6 +3,10 @@ import math
 import cv2
 import pantilthat as pth
 
+from processor.camera import CameraStream, SharedObject
+from processor.algorithms.frame_difference import process_frames  # TODO: implement motion compensation
+
+
 class PID:
     def __init__(self, kp, ki, kd, setpoint, deg_per_px,
                  tau=0.02, max_dt=0.1, integral_limit=None):
@@ -88,8 +92,18 @@ def get_measurement_from_camera(frame):
     # Replace with your actual detection returning y-coordinate or None
     return None
 
+# This will run process and tilt separately, such that blocking does not occur anymore.
+def run_tasks_in_parallel(tasks):
+    with ThreadPoolExecutor() as executor:
+        running_tasks = [executor.submit(task) for task in tasks]
+        for running_task in running_tasks:
+            running_task.result()
+
+
 if __name__ == '__main__':
-    # Initialize camera
+    # TODO: impreview, FPS overlay, storing frames
+
+    # TODO: Initialize camera
     cap = cv2.VideoCapture(0)
     ret, frame = cap.read()
     if not ret:
@@ -147,12 +161,12 @@ if __name__ == '__main__':
         while True:
             loop_start = time.monotonic()
 
-            # 1) Read frame
+            # 1) TODO: Read frame
             ret, frame = cap.read()
             if not ret:
                 continue
 
-            # 2) Detect object
+            # 2) TODO: Detect object
             measurement_y = get_measurement_from_camera(frame)
 
             # 3) Miss-count logic instead of immediate reset on single-frame dropout
