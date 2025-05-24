@@ -1,11 +1,12 @@
 import time
 import math
 import cv2
+
 import pantilthat as pth
 
 from threading import Thread
 from processor.camera import CameraStream, SharedObject
-from processor.algorithms.frame_difference import process_frames  # TODO: implement motion compensation
+from processor.algorithms.frame_difference import process_frames
 
 
 class PID:
@@ -88,17 +89,12 @@ class PID:
 def clamp(value, vmin, vmax):
     return max(vmin, min(vmax, value))
 
+
 # Placeholder for detection logic
 def get_measurement_from_camera(frame):
     # Replace with your actual detection returning y-coordinate or None
     return None
 
-# This will run process and tilt separately, such that blocking does not occur anymore.
-def run_tasks_in_parallel(tasks):
-    with ThreadPoolExecutor() as executor:
-        running_tasks = [executor.submit(task) for task in tasks]
-        for running_task in running_tasks:
-            running_task.result()
 
 def tilt(shared_obj):
     while True:
@@ -109,8 +105,6 @@ def tilt(shared_obj):
 
 
 if __name__ == '__main__':
-    # TODO: parallelize tilt-mechanism
-
     # Create shared-memory for capturing, processing and tilting
     shared_obj = SharedObject()
 
@@ -156,6 +150,7 @@ if __name__ == '__main__':
         current_tilt = 0.0
         # pth.tilt(int(current_tilt))
         print("[INFO] Tilt servo initialized.")
+
     except Exception as e:
         print(f"[ERROR] Could not initialize PanTilt HAT: {e}")
         camera.stop()
@@ -264,9 +259,9 @@ if __name__ == '__main__':
                     filename = os.path.join(output_dir, f"frame_{i:06d}.png")
                     cv.imwrite(filename, frame)
 
-
     except KeyboardInterrupt:
         print("\n[INFO] Exiting, disabling tilt servo.")
+
     finally:
         pth.servo_enable(2, False)
         camera.stop()
