@@ -3,6 +3,7 @@ import math
 import cv2
 import pantilthat as pth
 
+from threading import Thread
 from processor.camera import CameraStream, SharedObject
 from processor.algorithms.frame_difference import process_frames  # TODO: implement motion compensation
 
@@ -99,6 +100,13 @@ def run_tasks_in_parallel(tasks):
         for running_task in running_tasks:
             running_task.result()
 
+def tilt(shared_obj):
+    while True:
+        if shared_obj.is_exit:
+            sys.exit(0)
+        pth.pan(0)
+        pth.tilt(shared_obj.current_tilt)
+
 
 if __name__ == '__main__':
     # TODO: parallelize tilt-mechanism
@@ -109,6 +117,10 @@ if __name__ == '__main__':
     # Initialize camera
     camera = CameraStream(shared_obj)
     camera.start()
+
+    # Initialize and start thread for tilting
+    tilt_thread = Thread(target=tilt, args=(shared_obj,), daemon=True)
+    tilt_thread.start()
 
     # Frame dimensions and timing
     FRAME_HEIGHT = 1332
@@ -142,7 +154,7 @@ if __name__ == '__main__':
     try:
         pth.servo_enable(2, True)
         current_tilt = 0.0
-        pth.tilt(int(current_tilt))
+        # pth.tilt(int(current_tilt))
         print("[INFO] Tilt servo initialized.")
     except Exception as e:
         print(f"[ERROR] Could not initialize PanTilt HAT: {e}")
@@ -232,7 +244,8 @@ if __name__ == '__main__':
 
                 desired = current_tilt + delta_deg
                 current_tilt = clamp(desired, SERVO_MIN, SERVO_MAX)
-                pth.tilt(int(round(current_tilt)))
+                # pth.tilt(int(round(current_tilt)))
+                shared_obj.current_tilt = int(round(current_tilt))
 
             # 6) Maintain loop timing
             elapsed = time.monotonic() - loop_start
