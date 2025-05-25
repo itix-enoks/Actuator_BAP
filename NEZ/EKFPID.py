@@ -149,6 +149,7 @@ if __name__ == '__main__':
                 pid_active = False
             elif miss_count == 0 and not pid_active and measurement_y is not None:
                 pid.reset()
+                ekf.reset()
                 pid_active = True
 
             if pid_active and measurement_y is not None:
