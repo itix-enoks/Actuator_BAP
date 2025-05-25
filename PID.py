@@ -1,12 +1,14 @@
 import time
 import math
-import cv2
 
+import cv2 as cv
+
+import processor.algorithms.colored_frame_difference as proc_color
+import processor.algorithms.frame_difference as proc_naive
 import pantilthat as pth
 
-from threading import Thread
 from processor.camera import CameraStream, SharedObject
-from processor.algorithms.frame_difference import process_frames
+from threading import Thread
 
 
 class PID:
@@ -157,7 +159,7 @@ if __name__ == '__main__':
         exit()
 
     # Tracking control variables
-    PIXEL_DEADBAND = 31    # px
+    PIXEL_DEADBAND = 31     # px
     MISS_LIMIT = 120        # frames of missed detection before deactivating
     miss_count = 0
     pid_active = False
@@ -174,8 +176,21 @@ if __name__ == '__main__':
     camera_frame_cnt_in_sec = 0
     camera_is_one_sec_passed = False
 
-    # Storing frames
-    camera_frame_buffer = []
+    # Colors
+    color_hues = {
+        "Red": 0,
+        "Green": 60,
+        "Blue": 120,
+        "Cyan": 90,
+        "Magenta": 150,
+        "Yellow": 30,
+        "Amber": 15,
+        "Chartreuse": 45,
+        "Spring Green": 75
+        "Azure": 105,
+        "Violet": 135,
+        "Rose": 165
+    }
 
     print("[INFO] Starting tracking loop. Press Ctrl+C to exit.")
     try:
@@ -184,13 +199,14 @@ if __name__ == '__main__':
 
             # 1) Read frame
             current_frame = shared_obj.frame
-            current_gray_frame = cv.cvtColor(current_frame, cv.COLOR_RGB2GRAY) if current_frame is not None else None
+            current_gray_frame = cv.cvtColor(current_frame, cv.COLOR_RGB2HSV) if current_frame is not None else None
 
             # 2) Detect object
             if current_frame is None or camera_prev_gray is None:
                 camera_preview_output, measurement_y = None, None
             else:
-                camera_preview_output, measurement_y = process_frames(camera_prev_gray, current_gray_frame, current_frame)
+                # camera_preview_output, measurement_y = proc_naive.process_frames(camera_prev_gray, current_gray_frame, current_frame)
+                measurement_y, camera_preview_output, _ = proc_color.process_frames(camera_prev_gray, current_gray_frame, current_frame, color_hues["Rose"], hue_tolerance=10)
 
             camera_prev_gray = current_gray_frame
 
@@ -215,6 +231,7 @@ if __name__ == '__main__':
             # 2.2) Preview frame
             recording_id = time.strftime('%y%m%d%H%M%S', time.gmtime())
             if camera_preview_output is not None:
+                camera_preview_output = cv.cvtColor(camera_preview_output, cv.COLOR_RGB2BGR)
                 cv.imshow(f'[{recording_id}] [Live] Processed Frame', camera_preview_output)
 
             # 3) Miss-count logic instead of immediate reset on single-frame dropout
@@ -265,4 +282,4 @@ if __name__ == '__main__':
     finally:
         pth.servo_enable(2, False)
         camera.stop()
-        cv2.destroyAllWindows()
+        cv.destroyAllWindows()
