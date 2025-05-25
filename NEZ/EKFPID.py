@@ -1,9 +1,13 @@
-import time
+import numpy as np
 import math
+import time
 import cv2
 import pantilthat as pth
-from EKF import EKFTracker  # ← Import your EKF
+from EKF import EKFTracker  # ← Your EKF class
 
+# ----------------------------
+# PID controller definition
+# ----------------------------
 class PID:
     def __init__(self, kp, ki, kd, setpoint, deg_per_px, tau=0.02, max_dt=0.1, integral_limit=None):
         self.kp = kp
@@ -29,7 +33,8 @@ class PID:
         error = self.setpoint - measurement
         integral_candidate = self.integral + error * dt
         if self.integral_limit is not None:
-            integral_candidate = max(-self.integral_limit, min(self.integral_limit, integral_candidate))
+            integral_candidate = max(-self.integral_limit,
+                                     min(self.integral_limit, integral_candidate))
         self.integral = integral_candidate
 
         if self.prev_error is None:
@@ -66,7 +71,11 @@ def get_measurement_from_camera(frame):
     # Replace with your actual object detection logic
     return None  # ← Placeholder
 
+# ----------------------------
+# Main tracking loop
+# ----------------------------
 if __name__ == '__main__':
+    # camera startup
     cap = cv2.VideoCapture(0)
     ret, frame = cap.read()
     if not ret:
@@ -74,34 +83,33 @@ if __name__ == '__main__':
         cap.release()
         exit()
 
-    FRAME_HEIGHT = frame.shape[0]
-    FRAME_RATE = 120.0
+    # geometry & timing
+    FRAME_HEIGHT   = frame.shape[0]
+    FRAME_RATE     = 120.0
     LOOP_DT_TARGET = 1.0 / FRAME_RATE
 
     SENSOR_HEIGHT_MM = 4.712
-    FOCAL_LENGTH_MM = 16
-    DROP_DIST_M = 2.0
+    FOCAL_LENGTH_MM  = 16
+    DROP_DIST_M      = 2.0
 
-    vfov_rad = 2 * math.atan(SENSOR_HEIGHT_MM / (2 * FOCAL_LENGTH_MM))
-    vfov_deg = math.degrees(vfov_rad)
-    deg_per_px = vfov_deg / FRAME_HEIGHT
-    px_per_m = FRAME_HEIGHT / (2 * DROP_DIST_M * math.tan(vfov_rad / 2))
+    vfov_rad  = 2 * math.atan(SENSOR_HEIGHT_MM / (2 * FOCAL_LENGTH_MM))
+    vfov_deg  = math.degrees(vfov_rad)
+    deg_per_px= vfov_deg / FRAME_HEIGHT
+    px_per_m  = FRAME_HEIGHT / (2 * DROP_DIST_M * math.tan(vfov_rad / 2))
 
-    g_pix = 9.81 * px_per_m
-    c_over_m_pix = 0.1 * px_per_m
+    g_pix        = 9.81 * px_per_m
+    c_over_m_pix = 0.1  * px_per_m
 
     pid_setpoint = FRAME_HEIGHT / 2
     SERVO_MIN, SERVO_MAX = -90, 90
-    I_LIMIT = SERVO_MAX / 0.10
+    I_LIMIT               = SERVO_MAX / 0.10
 
+    # instantiate controllers
     pid = PID(
-        kp=0.11,
-        ki=0.10,
-        kd=0.02,
+        kp=0.11, ki=0.10, kd=0.02,
         setpoint=pid_setpoint,
         deg_per_px=deg_per_px,
-        tau=0.02,
-        max_dt=0.1,
+        tau=0.02, max_dt=0.1,
         integral_limit=I_LIMIT
     )
 
@@ -113,6 +121,8 @@ if __name__ == '__main__':
         meas_var=16.0,
         deg_per_px=deg_per_px
     )
+
+    filter_initialized = False    
 
     try:
         pth.servo_enable(2, True)
@@ -126,9 +136,9 @@ if __name__ == '__main__':
         exit()
 
     PIXEL_DEADBAND = 31
-    MISS_LIMIT = 120
-    miss_count = 0
-    pid_active = False
+    MISS_LIMIT     = 120
+    miss_count     = 0
+    pid_active     = False
 
     print("[INFO] Starting tracking loop. Press Ctrl+C to exit.")
     try:
@@ -146,21 +156,28 @@ if __name__ == '__main__':
             else:
                 miss_count = 0
 
+            # On first valid detection, initialize EKF state to measurement
+            if measurement_y is not None and not filter_initialized:
+                ekf.x = np.array([[measurement_y], [0.0]])       
+                ekf.P = np.diag([1.0, 100.0])                     
+                filter_initialized = True                           
+                # Skip PID & motion for this frame if desired:
+                continue                                        
+
             if miss_count >= MISS_LIMIT and pid_active:
                 pid_active = False
-            elif miss_count == 0 and not pid_active and measurement_y is not None:
+            elif miss_count == 0 and not pid_active and filter_initialized:  
                 pid.reset()
                 ekf.reset()
                 pid_active = True
 
             if pid_active and measurement_y is not None:
-                # EKF step: predict first
+                # EKF predict→update as before
                 predicted_state = ekf.predict()
-                predicted_y = float(predicted_state[0])  # just the position
+                predicted_y     = float(predicted_state[0])
 
-                # Update EKF to keep filter accurate internally
-                ekf.update(measurement_y, camera_angle_deg=current_tilt-initial_tilt)
-              
+                ekf.update(measurement_y, camera_angle_deg=current_tilt - initial_tilt)
+
                 if abs(pid.setpoint - predicted_y) > PIXEL_DEADBAND:
                     delta_deg = pid.update(predicted_y)
                 else:
@@ -170,7 +187,8 @@ if __name__ == '__main__':
                 current_tilt = clamp(desired, SERVO_MIN, SERVO_MAX)
                 pth.tilt(int(round(current_tilt)))
 
-            elapsed = time.monotonic() - loop_start
+            # maintain loop rate
+            elapsed    = time.monotonic() - loop_start
             sleep_time = LOOP_DT_TARGET - elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
