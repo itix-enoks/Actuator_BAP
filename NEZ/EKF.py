@@ -97,12 +97,15 @@ class EKFTracker:
         return self.x.copy()
 
     def reset(self):
-    self.x = np.zeros((2, 1))
-    self.P = np.eye(2) * 100.0
+        self.x = np.zeros((2, 1))
+        self.P = np.eye(2) * 100.0
 
     def get_state(self):
-        """Return (position_px, velocity_px_s)."""
-        return float(self.x[0]), float(self.x[1])
+        # return position and velocity
+        p_px = float(self.x[0])
+        v_px_s = float(self.x[1])
+        v_m_s = v_px_s * self.m_per_px
+        return p_px, v_m_s
 
 if __name__ == '__main__':
     FRAME_RATE = 120.0
