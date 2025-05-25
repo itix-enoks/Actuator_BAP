@@ -96,6 +96,10 @@ class EKFTracker:
         self.P  = (np.eye(2) - K.dot(H)).dot(self.P)
         return self.x.copy()
 
+    def reset(self):
+    self.x = np.zeros((2, 1))
+    self.P = np.eye(2) * 100.0
+
     def get_state(self):
         """Return (position_px, velocity_px_s)."""
         return float(self.x[0]), float(self.x[1])
