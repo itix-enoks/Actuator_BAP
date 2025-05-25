@@ -117,6 +117,7 @@ if __name__ == '__main__':
     try:
         pth.servo_enable(2, True)
         current_tilt = 0.0
+        initial_tilt = current_tilt
         pth.tilt(int(current_tilt))
         print("[INFO] Tilt servo initialized.")
     except Exception as e:
