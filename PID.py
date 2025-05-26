@@ -104,8 +104,15 @@ def tilt(shared_obj):
     while True:
         if shared_obj.is_exit:
             sys.exit(0)
+        loop_start = time.monotonic()
         pth.pan(0)
         pth.tilt(shared_obj.current_tilt)
+
+        elapsed = time.monotonic() - loop_start
+        sleep_time = shared_obj.LOOP_DT_TARGET - elapsed
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+
 
 
 if __name__ == '__main__':
@@ -116,14 +123,14 @@ if __name__ == '__main__':
     camera = CameraStream(shared_obj)
     camera.start()
 
-    # Initialize and start thread for tilting
-    tilt_thread = Thread(target=tilt, args=(shared_obj,), daemon=True)
-    tilt_thread.start()
-
     # Frame dimensions and timing
     FRAME_HEIGHT = 1332 / 2
     FRAME_RATE = 120.0
-    LOOP_DT_TARGET = 1.0 / FRAME_RATE
+    shared_obj.LOOP_DT_TARGET = 1.0 / FRAME_RATE
+
+    # Initialize and start thread for tilting
+    tilt_thread = Thread(target=tilt, args=(shared_obj,), daemon=True)
+    tilt_thread.start()
 
     # Compute vertical FoV
     SENSOR_HEIGHT_MM = 4.712
@@ -198,8 +205,6 @@ if __name__ == '__main__':
     print("[INFO] Starting tracking loop. Press Ctrl+C to exit.")
     try:
         while True:
-            loop_start = time.monotonic()
-
             # 1) Read frame
             current_frame = shared_obj.frame
             current_gray_frame = cv.cvtColor(current_frame, cv.COLOR_RGB2HSV) if current_frame is not None else None
@@ -226,16 +231,16 @@ if __name__ == '__main__':
                 camera_is_one_sec_passed = True
 
             if camera_is_one_sec_passed:
-                cv.putText(camera_preview_output, f"FPS: {camera_frame_per_sec}", (10, 25), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv.putText(current_frame, f"FPS: {camera_frame_per_sec}", (10, 25), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             else:
-                cv.putText(camera_preview_output, f"FPS: (WAITING...)", (10, 25), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv.putText(current_frame, f"FPS: (WAITING...)", (10, 25), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
             camera_prev_time = camera_curr_time
 
             # 2.2) Preview frame
-            if camera_preview_output is not None:
+            if current_frame is not None:
                 # camera_preview_output = cv.cvtColor(camera_preview_output, cv.COLOR_RGB2BGR)
-                cv.imshow(f'[{recording_id}] [Live] Processed Frame', camera_preview_output)
+                cv.imshow(f'[{recording_id}] [Live] Processed Frame', current_frame)
 
             # 3) Miss-count logic instead of immediate reset on single-frame dropout
             if measurement_y is None:
@@ -252,7 +257,7 @@ if __name__ == '__main__':
 
             # 5) PID update and servo write when active
             if pid_active and measurement_y is not None:
-                if abs(pid.setpoint - measurement_y) > PIXEL_DEADBAND:# and measurement_y >= FRAME_HEIGHT / 2:
+                if abs(pid.setpoint - measurement_y) > PIXEL_DEADBAND and measurement_y >= FRAME_HEIGHT / 2:
                     delta_deg = pid.update(measurement_y)
                 else:
                     delta_deg = 0.0
@@ -263,13 +268,7 @@ if __name__ == '__main__':
                 print(f"info: tilt: {current_tilt} deg")
                 shared_obj.current_tilt = int(round(current_tilt))
 
-            # 6) Maintain loop timing
-            elapsed = time.monotonic() - loop_start
-            sleep_time = LOOP_DT_TARGET - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-
-            # 7) Exit & Store frames
+            # 6) Exit & Store frames
             if cv.waitKey(1) & 0xFF == ord('q'):
                 shared_obj.is_exit = True
 
