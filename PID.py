@@ -1,3 +1,5 @@
+import os
+import sys
 import time
 import math
 
@@ -119,13 +121,13 @@ if __name__ == '__main__':
     tilt_thread.start()
 
     # Frame dimensions and timing
-    FRAME_HEIGHT = 1332
+    FRAME_HEIGHT = 1332 / 2
     FRAME_RATE = 120.0
     LOOP_DT_TARGET = 1.0 / FRAME_RATE
 
     # Compute vertical FoV
     SENSOR_HEIGHT_MM = 4.712
-    FOCAL_LENGTH_MM = 16
+    FOCAL_LENGTH_MM = 25
     vfov_rad = 2 * math.atan(SENSOR_HEIGHT_MM / (2 * FOCAL_LENGTH_MM))
     vfov_deg = math.degrees(vfov_rad)
     deg_per_px = vfov_deg / FRAME_HEIGHT
@@ -136,9 +138,9 @@ if __name__ == '__main__':
     I_LIMIT = SERVO_MAX / 0.10
 
     pid = PID(
-        kp=0.11,
-        ki=0.10,
-        kd=0.02,
+        kp=0.5,
+        ki=0.0,
+        kd=0.0,
         setpoint=pid_setpoint,
         deg_per_px=deg_per_px,
         tau=0.02,
@@ -149,7 +151,7 @@ if __name__ == '__main__':
     # Initialize PanTilt HAT
     try:
         pth.servo_enable(2, True)
-        current_tilt = 0.0
+        current_tilt = shared_obj.current_tilt
         # pth.tilt(int(current_tilt))
         print("[INFO] Tilt servo initialized.")
 
@@ -175,6 +177,7 @@ if __name__ == '__main__':
     camera_frame_per_sec = 0
     camera_frame_cnt_in_sec = 0
     camera_is_one_sec_passed = False
+    recording_id = time.strftime('%y%m%d%H%M%S', time.gmtime())
 
     # Colors
     color_hues = {
@@ -186,7 +189,7 @@ if __name__ == '__main__':
         "Yellow": 30,
         "Amber": 15,
         "Chartreuse": 45,
-        "Spring Green": 75
+        "Spring Green": 75,
         "Azure": 105,
         "Violet": 135,
         "Rose": 165
@@ -203,11 +206,12 @@ if __name__ == '__main__':
 
             # 2) Detect object
             if current_frame is None or camera_prev_gray is None:
-                camera_preview_output, measurement_y = None, None
+                measurement_y = None
             else:
                 # camera_preview_output, measurement_y = proc_naive.process_frames(camera_prev_gray, current_gray_frame, current_frame)
                 measurement_y, camera_preview_output, _ = proc_color.process_frames(camera_prev_gray, current_gray_frame, current_frame, color_hues["Rose"], hue_tolerance=10)
 
+            print(f"info: y: {measurement_y}")
             camera_prev_gray = current_gray_frame
 
             # 2.1) FPS overlay
@@ -229,9 +233,8 @@ if __name__ == '__main__':
             camera_prev_time = camera_curr_time
 
             # 2.2) Preview frame
-            recording_id = time.strftime('%y%m%d%H%M%S', time.gmtime())
             if camera_preview_output is not None:
-                camera_preview_output = cv.cvtColor(camera_preview_output, cv.COLOR_RGB2BGR)
+                # camera_preview_output = cv.cvtColor(camera_preview_output, cv.COLOR_RGB2BGR)
                 cv.imshow(f'[{recording_id}] [Live] Processed Frame', camera_preview_output)
 
             # 3) Miss-count logic instead of immediate reset on single-frame dropout
@@ -249,7 +252,7 @@ if __name__ == '__main__':
 
             # 5) PID update and servo write when active
             if pid_active and measurement_y is not None:
-                if abs(pid.setpoint - measurement_y) > PIXEL_DEADBAND:
+                if abs(pid.setpoint - measurement_y) > PIXEL_DEADBAND:# and measurement_y >= FRAME_HEIGHT / 2:
                     delta_deg = pid.update(measurement_y)
                 else:
                     delta_deg = 0.0
@@ -257,6 +260,7 @@ if __name__ == '__main__':
                 desired = current_tilt + delta_deg
                 current_tilt = clamp(desired, SERVO_MIN, SERVO_MAX)
                 # pth.tilt(int(round(current_tilt)))
+                print(f"info: tilt: {current_tilt} deg")
                 shared_obj.current_tilt = int(round(current_tilt))
 
             # 6) Maintain loop timing

@@ -7,7 +7,7 @@ from picamera2 import Picamera2
 
 
 class SharedObject:
-    current_tilt = -20.0
+    current_tilt = -30.0
 
     frame = None
     frame_buffer = []
@@ -44,7 +44,7 @@ class CameraStream:
             rotated = cv.rotate(frame, cv.ROTATE_90_CLOCKWISE)
             self.shared.frame = rotated
             self.frame_count += 1
-            self.shared.frame_buffer.append(frame)
+            self.shared.frame_buffer.append(rotated)
 
     def stop(self):
         self.picam2.stop()
