@@ -4,12 +4,14 @@ import time
 import math
 
 import cv2 as cv
+import numpy as np
 
 import processor.algorithms.colored_frame_difference as proc_color
 import processor.algorithms.frame_difference as proc_naive
 import pantilthat as pth
 
 from processor.camera import CameraStream, SharedObject
+from NEZ.BIGEKF import EKFTracker
 from threading import Thread
 
 
@@ -125,8 +127,9 @@ if __name__ == '__main__':
 
     # Frame dimensions and timing
     FRAME_HEIGHT = 1332 / 2
-    FRAME_RATE = 120.0
+    FRAME_RATE = 70.0 #!
     shared_obj.LOOP_DT_TARGET = 1.0 / FRAME_RATE
+    INITIAL_TILT = shared_obj.current_tilt
 
     # Initialize and start thread for tilting
     tilt_thread = Thread(target=tilt, args=(shared_obj,), daemon=True)
@@ -135,9 +138,15 @@ if __name__ == '__main__':
     # Compute vertical FoV
     SENSOR_HEIGHT_MM = 4.712
     FOCAL_LENGTH_MM = 25
+    DROP_DIST_M      = 2.0
+
     vfov_rad = 2 * math.atan(SENSOR_HEIGHT_MM / (2 * FOCAL_LENGTH_MM))
     vfov_deg = math.degrees(vfov_rad)
     deg_per_px = vfov_deg / FRAME_HEIGHT
+    px_per_m  = FRAME_HEIGHT / (2 * DROP_DIST_M * math.tan(vfov_rad / 2))
+
+    g_pix        = 9.81 * px_per_m
+    c_over_m_pix = 0.1  * px_per_m
 
     # PID and servo settings
     pid_setpoint = FRAME_HEIGHT / 2
@@ -154,6 +163,19 @@ if __name__ == '__main__':
         max_dt=0.1,
         integral_limit=I_LIMIT
     )
+
+    # instantiate EKF with converted pixel‐domain parameters
+    ekf = EKFTracker(
+        dt=shared_obj.LOOP_DT_TARGET,
+        c_over_m_pix=c_over_m_pix,
+        g_pix=g_pix,
+        process_var=50.0,     # tune this
+        meas_var=16.0,        # tune this
+        deg_per_px=deg_per_px,
+        px_per_m=px_per_m
+    )
+
+    filter_initialized = False
 
     # Initialize PanTilt HAT
     try:
@@ -248,24 +270,36 @@ if __name__ == '__main__':
             else:
                 miss_count = 0
 
+            # On first valid detection, initialize EKF state to measurement
+            if measurement_y is not None and not filter_initialized:
+                ekf.x = np.array([[measurement_y], [0.0]])
+                ekf.P = np.diag([1.0, 100.0])
+                filter_initialized = True
+                # Skip PID & motion for this frame if desired:
+                continue
+
             # 4) State-machine with MISS_LIMIT
             if miss_count >= MISS_LIMIT and pid_active:
                 pid_active = False
             elif miss_count == 0 and not pid_active and measurement_y is not None:
                 pid.reset()
+                ekf.reset()
                 pid_active = True
 
-            # 5) PID update and servo write when active
             if pid_active and measurement_y is not None:
-                if abs(pid.setpoint - measurement_y) > PIXEL_DEADBAND and measurement_y >= FRAME_HEIGHT / 2:
-                    delta_deg = pid.update(measurement_y)
+                # EKF predict→update as before
+                predicted_state = ekf.predict()
+                predicted_y     = float(predicted_state[0])
+
+                ekf.update(measurement_y, camera_angle_deg=current_tilt - INITIAL_TILT)
+
+                if abs(pid.setpoint - predicted_y) > PIXEL_DEADBAND:
+                    delta_deg = pid.update(predicted_y)
                 else:
                     delta_deg = 0.0
 
                 desired = current_tilt + delta_deg
                 current_tilt = clamp(desired, SERVO_MIN, SERVO_MAX)
-                # pth.tilt(int(round(current_tilt)))
-                print(f"info: tilt: {current_tilt} deg")
                 shared_obj.current_tilt = int(round(current_tilt))
 
             # 6) Exit & Store frames
