@@ -96,12 +96,6 @@ def clamp(value, vmin, vmax):
     return max(vmin, min(vmax, value))
 
 
-# Placeholder for detection logic
-def get_measurement_from_camera(frame):
-    # Replace with your actual detection returning y-coordinate or None
-    return None
-
-
 def tilt(shared_obj):
     while True:
         if shared_obj.is_exit:
@@ -126,8 +120,8 @@ if __name__ == '__main__':
     camera.start()
 
     # Frame dimensions and timing
-    FRAME_HEIGHT = 1332 / 2
-    FRAME_RATE = 70.0 #!
+    FRAME_HEIGHT = 1332
+    FRAME_RATE = 108.0 #!
     shared_obj.LOOP_DT_TARGET = 1.0 / FRAME_RATE
     INITIAL_TILT = shared_obj.current_tilt
 
@@ -147,7 +141,7 @@ if __name__ == '__main__':
     px_per_m  = FRAME_HEIGHT / (2 * DROP_DIST_M * math.tan(vfov_rad / 2))
 
     g_pix        = 9.81 * px_per_m
-    c_over_m_pix = C_OVER_M / px_per_m
+    c_over_m_pix = C_OVER_M
 
     # PID and servo settings
     pid_setpoint = FRAME_HEIGHT / 2
@@ -289,11 +283,11 @@ if __name__ == '__main__':
                 pid_active = True
 
             if pid_active and measurement_y is not None:
-                # EKF predict→update as before
-                ekf.update(measurement_y, camera_angle_deg=current_tilt - INITIAL_TILT)
-
+                # EKF predict, update as before
                 predicted_state = ekf.predict()
                 predicted_y     = float(predicted_state[0])
+
+                ekf.update(measurement_y, camera_angle_deg=current_tilt - INITIAL_TILT)
 
                 if abs(pid.setpoint - predicted_y) > PIXEL_DEADBAND:
                     delta_deg = pid.update(predicted_y)
