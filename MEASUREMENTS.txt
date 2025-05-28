@@ -1,0 +1,29 @@
+FPS=~95
+
+info: y: 11.5
+info: tilt: -30.0 deg
+info: y: 17.5
+info: tilt: -30.0 deg
+info: y: 33.0
+info: tilt: -30.0 deg
+info: y: 42.0
+info: tilt: -30.0 deg
+info: y: 53.0
+info: tilt: -30.0 deg
+info: y: 75.5
+info: tilt: -30.0 deg
+info: y: 100.5
+info: tilt: -30.0 deg
+info: y: 205.0
+info: tilt: -30.0 deg
+info: y: 267.5
+info: tilt: -30.0 deg
+info: y: 335.0
+info: tilt: -30.0 deg
+info: y: 434.0
+info: tilt: -29.183559963379533 deg
+info: y: 473.0
+info: tilt: -28.0518609027175 deg
+info: y: 635.0
+info: tilt: -25.610624357575112 deg
+
