@@ -1,0 +1,55 @@
+[INFO] Take 1
+[INFO] Current camera height: 640 px
+[INFO] 50 FPS
+[INFO] Measured y=6.5 px
+[INFO] Measured y=27.5 px
+[INFO] Measured y=36.5 px
+[INFO] Measured y=110.0 px
+[INFO] Measured y=199.5 px
+[INFO] Measured y=308.0 px
+[INFO] Measured y=368.5 px
+[INFO] Measured y=433.5 px
+[INFO] Measured y=534.5 px
+[INFO] Measured y=577.0 px
+
+[INFO] Take 2
+[INFO] Current camera height: 640 px
+[INFO] 50 FPS
+[INFO] Measured y=9.5 px
+[INFO] Measured y=24.0 px
+[INFO] Measured y=40.0 px
+[INFO] Measured y=53.0 px
+[INFO] Measured y=116.5 px
+[INFO] Measured y=140.0 px
+[INFO] Measured y=232.0 px
+[INFO] Measured y=260.5 px
+[INFO] Measured y=342.5 px
+[INFO] Measured y=436.0 px
+[INFO] Measured y=502.0 px
+[INFO] Measured y=574.5 px
+
+[INFO] Take 3
+[INFO] Current camera height: 640 px
+[INFO] 50 FPS
+[INFO] Measured y=6.5 px
+[INFO] Measured y=26.5 px
+[INFO] Measured y=69.0 px
+[INFO] Measured y=92.5 px
+[INFO] Measured y=167.5 px
+[INFO] Measured y=219.0 px
+[INFO] Measured y=346.0 px
+[INFO] Measured y=484.0 px
+[INFO] Measured y=519.5 px
+
+[INFO] Take 4
+[INFO] Current camera height: 640 px
+[INFO] 50 FPS
+[INFO] Measured y=22.5 px
+[INFO] Measured y=78.5 px
+[INFO] Measured y=107.0 px
+[INFO] Measured y=163.5 px
+[INFO] Measured y=194.5 px
+[INFO] Measured y=263.0 px
+[INFO] Measured y=370.0 px
+[INFO] Measured y=478.0 px
+[INFO] Measured y=620.0 px
