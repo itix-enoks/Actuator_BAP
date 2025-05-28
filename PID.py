@@ -138,7 +138,8 @@ if __name__ == '__main__':
     # Compute vertical FoV
     SENSOR_HEIGHT_MM = 4.712
     FOCAL_LENGTH_MM = 25
-    DROP_DIST_M      = 2.0
+    DROP_DIST_M      = 2.5
+    C_OVER_M = 0.005
 
     vfov_rad = 2 * math.atan(SENSOR_HEIGHT_MM / (2 * FOCAL_LENGTH_MM))
     vfov_deg = math.degrees(vfov_rad)
@@ -146,7 +147,7 @@ if __name__ == '__main__':
     px_per_m  = FRAME_HEIGHT / (2 * DROP_DIST_M * math.tan(vfov_rad / 2))
 
     g_pix        = 9.81 * px_per_m
-    c_over_m_pix = 0.1  * px_per_m
+    c_over_m_pix = C_OVER_M / px_per_m
 
     # PID and servo settings
     pid_setpoint = FRAME_HEIGHT / 2
@@ -237,8 +238,9 @@ if __name__ == '__main__':
             else:
                 # camera_preview_output, measurement_y = proc_naive.process_frames(camera_prev_gray, current_gray_frame, current_frame)
                 measurement_y, camera_preview_output, _ = proc_color.process_frames(camera_prev_gray, current_gray_frame, current_frame, color_hues["Rose"], hue_tolerance=10)
+                if measurement_y:
+                    print(f"\ninfo: proc: p_actual={measurement_y} px")
 
-            print(f"info: y: {measurement_y}")
             camera_prev_gray = current_gray_frame
 
             # 2.1) FPS overlay
@@ -288,10 +290,10 @@ if __name__ == '__main__':
 
             if pid_active and measurement_y is not None:
                 # EKF predict→update as before
+                ekf.update(measurement_y, camera_angle_deg=current_tilt - INITIAL_TILT)
+
                 predicted_state = ekf.predict()
                 predicted_y     = float(predicted_state[0])
-
-                ekf.update(measurement_y, camera_angle_deg=current_tilt - INITIAL_TILT)
 
                 if abs(pid.setpoint - predicted_y) > PIXEL_DEADBAND:
                     delta_deg = pid.update(predicted_y)
@@ -300,7 +302,7 @@ if __name__ == '__main__':
 
                 desired = current_tilt + delta_deg
                 current_tilt = clamp(desired, SERVO_MIN, SERVO_MAX)
-                shared_obj.current_tilt = int(round(current_tilt))
+                # shared_obj.current_tilt = int(round(current_tilt))
 
             # 6) Exit & Store frames
             if cv.waitKey(1) & 0xFF == ord('q'):
